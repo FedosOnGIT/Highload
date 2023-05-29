@@ -1,8 +1,8 @@
 package nadutkin;
 
 import nadutkin.app.impl.ServiceImpl;
-import nadutkin.app.utils.ServiceConfig;
 import nadutkin.database.impl.Constants;
+import nadutkin.utils.ServiceConfig;
 
 import java.io.IOException;
 import java.nio.file.Files;

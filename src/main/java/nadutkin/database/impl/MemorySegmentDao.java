@@ -1,10 +1,10 @@
 package nadutkin.database.impl;
 
+import jdk.incubator.foreign.MemorySegment;
 import nadutkin.database.Config;
 import nadutkin.database.Dao;
 import nadutkin.database.Entry;
-import jdk.incubator.foreign.MemorySegment;
-
+import nadutkin.utils.UtilsClass;
 
 import java.io.IOException;
 import java.util.Iterator;
