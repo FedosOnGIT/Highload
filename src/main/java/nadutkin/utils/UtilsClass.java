@@ -1,16 +1,24 @@
-package nadutkin.database.impl;
+package nadutkin.utils;
 
+import jdk.incubator.foreign.MemorySegment;
 import nadutkin.database.Config;
 import nadutkin.database.Entry;
-import jdk.incubator.foreign.MemorySegment;
+import nadutkin.database.impl.MemorySegmentComparator;
+import nadutkin.database.impl.Storage;
+import one.nio.http.HttpServerConfig;
+import one.nio.server.AcceptorConfig;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static nadutkin.database.impl.Constants.LOG;
 import static nadutkin.database.impl.StorageMethods.getSizeOnDisk;
 
 public final class UtilsClass {
@@ -62,12 +70,98 @@ public final class UtilsClass {
         }
     }
 
+    public static byte[] getBytes(String message) {
+        return message.getBytes(StandardCharsets.UTF_8);
+    }
+
+    public static void shutdownAndAwaitTermination(ExecutorService pool) {
+        pool.shutdown(); // Disable new tasks from being submitted
+        try {
+            // Wait a while for existing tasks to terminate
+            if (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
+                pool.shutdownNow(); // Cancel currently executing tasks
+                // Wait a while for tasks to respond to being cancelled
+                if (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
+                    LOG.error("Pool did not terminate");
+                }
+            }
+        } catch (InterruptedException ie) {
+            // (Re-)Cancel if current thread also interrupted
+            pool.shutdownNow();
+            // Preserve interrupt status
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    public static HttpServerConfig createConfigFromPort(int port) {
+        HttpServerConfig httpConfig = new HttpServerConfig();
+        AcceptorConfig acceptor = new AcceptorConfig();
+        acceptor.port = port;
+        acceptor.reusePort = true;
+        httpConfig.acceptors = new AcceptorConfig[]{acceptor};
+        return httpConfig;
+    }
+
+    public static class Memory {
+
+        static final Memory EMPTY = new Memory(-1);
+        private final AtomicLong size = new AtomicLong();
+        private final AtomicBoolean oversized = new AtomicBoolean();
+
+        private final ConcurrentSkipListMap<MemorySegment, Entry<MemorySegment>> delegate =
+                new ConcurrentSkipListMap<>(MemorySegmentComparator.INSTANCE);
+
+        private final long sizeThreshold;
+
+        Memory(long sizeThreshold) {
+            this.sizeThreshold = sizeThreshold;
+        }
+
+        public boolean isEmpty() {
+            return delegate.isEmpty();
+        }
+
+        public Collection<Entry<MemorySegment>> values() {
+            return delegate.values();
+        }
+
+        public boolean put(MemorySegment key, Entry<MemorySegment> entry) {
+            if (sizeThreshold == -1) {
+                throw new UnsupportedOperationException("Read-only map");
+            }
+            Entry<MemorySegment> segmentEntry = delegate.put(key, entry);
+            long sizeDelta = getSizeOnDisk(entry);
+            if (segmentEntry != null) {
+                sizeDelta -= getSizeOnDisk(segmentEntry);
+            }
+            long newSize = size.addAndGet(sizeDelta);
+            if (newSize > sizeThreshold) {
+                return !oversized.getAndSet(true);
+            }
+            return false;
+        }
+
+        public boolean overflow() {
+            return !oversized.getAndSet(true);
+        }
+
+        public Iterator<Entry<MemorySegment>> get(MemorySegment from, MemorySegment to) {
+            return to == null
+                    ? delegate.tailMap(from).values().iterator()
+                    : delegate.subMap(from, to).values().iterator();
+        }
+
+        public Entry<MemorySegment> get(MemorySegment key) {
+            return delegate.get(key);
+        }
+    }
+
     public static class State {
         final Config config;
-        final Memory memory;
-        final Memory flushing;
-        final Storage storage;
-        final boolean closed;
+        public final Memory memory;
+        public final Memory flushing;
+        public final Storage storage;
+        public final boolean closed;
 
         State(Config config, Memory memory, Memory flushing, Storage storage) {
             this.config = config;
@@ -85,7 +179,7 @@ public final class UtilsClass {
             this.closed = closed;
         }
 
-        static State newState(Config config, Storage storage) {
+        public static State newState(Config config, Storage storage) {
             return new State(
                     config,
                     new Memory(config.flushThresholdBytes()),
@@ -146,60 +240,6 @@ public final class UtilsClass {
 
         public boolean isFlushing() {
             return this.flushing != Memory.EMPTY;
-        }
-    }
-
-    public static class Memory {
-
-        static final Memory EMPTY = new Memory(-1);
-        private final AtomicLong size = new AtomicLong();
-        private final AtomicBoolean oversized = new AtomicBoolean();
-
-        private final ConcurrentSkipListMap<MemorySegment, Entry<MemorySegment>> delegate =
-                new ConcurrentSkipListMap<>(MemorySegmentComparator.INSTANCE);
-
-        private final long sizeThreshold;
-
-        Memory(long sizeThreshold) {
-            this.sizeThreshold = sizeThreshold;
-        }
-
-        public boolean isEmpty() {
-            return delegate.isEmpty();
-        }
-
-        public Collection<Entry<MemorySegment>> values() {
-            return delegate.values();
-        }
-
-        public boolean put(MemorySegment key, Entry<MemorySegment> entry) {
-            if (sizeThreshold == -1) {
-                throw new UnsupportedOperationException("Read-only map");
-            }
-            Entry<MemorySegment> segmentEntry = delegate.put(key, entry);
-            long sizeDelta = getSizeOnDisk(entry);
-            if (segmentEntry != null) {
-                sizeDelta -= getSizeOnDisk(segmentEntry);
-            }
-            long newSize = size.addAndGet(sizeDelta);
-            if (newSize > sizeThreshold) {
-                return !oversized.getAndSet(true);
-            }
-            return false;
-        }
-
-        public boolean overflow() {
-            return !oversized.getAndSet(true);
-        }
-
-        public Iterator<Entry<MemorySegment>> get(MemorySegment from, MemorySegment to) {
-            return to == null
-                    ? delegate.tailMap(from).values().iterator()
-                    : delegate.subMap(from, to).values().iterator();
-        }
-
-        public Entry<MemorySegment> get(MemorySegment key) {
-            return delegate.get(key);
         }
     }
 }

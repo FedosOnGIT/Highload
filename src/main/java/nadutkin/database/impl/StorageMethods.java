@@ -1,10 +1,11 @@
 package nadutkin.database.impl;
 
-import nadutkin.database.Config;
-import nadutkin.database.Entry;
 import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
+import nadutkin.database.Config;
+import nadutkin.database.Entry;
+import nadutkin.utils.UtilsClass;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;

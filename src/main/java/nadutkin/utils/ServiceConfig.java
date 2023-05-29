@@ -1,4 +1,4 @@
-package nadutkin.app.utils;
+package nadutkin.utils;
 
 import java.nio.file.Path;
 import java.util.List;

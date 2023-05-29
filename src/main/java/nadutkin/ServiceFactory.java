@@ -1,7 +1,7 @@
 package nadutkin;
 
 import nadutkin.app.Service;
-import nadutkin.app.utils.ServiceConfig;
+import nadutkin.utils.ServiceConfig;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

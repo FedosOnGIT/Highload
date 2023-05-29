@@ -1,28 +1,26 @@
 package nadutkin.app.impl;
 
 import jdk.incubator.foreign.MemorySegment;
-import nadutkin.app.Service;
-import nadutkin.app.utils.Constants;
-import nadutkin.app.utils.ServiceConfig;
 import nadutkin.ServiceFactory;
+import nadutkin.app.Service;
+import nadutkin.app.server.HighLoadHttpServer;
 import nadutkin.database.BaseEntry;
 import nadutkin.database.Config;
 import nadutkin.database.Entry;
 import nadutkin.database.impl.MemorySegmentDao;
+import nadutkin.utils.Constants;
+import nadutkin.utils.ServiceConfig;
 import one.nio.http.HttpServer;
-import one.nio.http.HttpServerConfig;
-import one.nio.http.HttpSession;
 import one.nio.http.Param;
 import one.nio.http.Path;
 import one.nio.http.Request;
 import one.nio.http.Response;
-import one.nio.net.Session;
-import one.nio.server.AcceptorConfig;
-import one.nio.server.SelectorThread;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
+
+import static nadutkin.utils.UtilsClass.createConfigFromPort;
 
 public class ServiceImpl implements Service {
 
@@ -41,23 +39,7 @@ public class ServiceImpl implements Service {
     @Override
     public CompletableFuture<?> start() throws IOException {
         dao = new MemorySegmentDao(new Config(config.workingDir(), Constants.FLUSH_THRESHOLD_BYTES));
-        server = new HttpServer(createConfigFromPort(config.selfPort())) {
-            @Override
-            public void handleDefault(Request request, HttpSession session) throws IOException {
-                Response response = new Response(Response.BAD_REQUEST, getBytes("Incorrect request path"));
-                session.sendResponse(response);
-            }
-
-            @Override
-            public synchronized void stop() {
-                for (SelectorThread selector : selectors) {
-                    for (Session session : selector.selector) {
-                        session.close();
-                    }
-                }
-                super.stop();
-            }
-        };
+        server = new HighLoadHttpServer(createConfigFromPort(config.selfPort()));
         server.addRequestHandlers(this);
         server.start();
         return CompletableFuture.completedFuture(null);
@@ -85,8 +67,8 @@ public class ServiceImpl implements Service {
         }
     }
 
-    @Path("/v0/entity")
-    public Response handleRequest(@Param(value = "id", required = true) String id,
+    @Path(Constants.REQUEST_PATH)
+    public Response handleRequest(@Param(value = "id") String id,
                                   Request request) {
         if (id == null || id.isEmpty()) {
             return new Response(Response.BAD_REQUEST, getBytes("Id can not be null or empty!"));
@@ -111,15 +93,6 @@ public class ServiceImpl implements Service {
                 return new Response(Response.METHOD_NOT_ALLOWED, Response.EMPTY);
             }
         }
-    }
-
-    private static HttpServerConfig createConfigFromPort(int port) {
-        HttpServerConfig httpConfig = new HttpServerConfig();
-        AcceptorConfig acceptor = new AcceptorConfig();
-        acceptor.port = port;
-        acceptor.reusePort = true;
-        httpConfig.acceptors = new AcceptorConfig[]{acceptor};
-        return httpConfig;
     }
 
     @ServiceFactory(stage = 1, week = 1, bonuses = {"SingleNodeTest#respectFileFolder"})

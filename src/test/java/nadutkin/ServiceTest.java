@@ -1,7 +1,7 @@
 package nadutkin;
 
 import nadutkin.app.Service;
-import nadutkin.app.utils.ServiceConfig;
+import nadutkin.utils.ServiceConfig;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ConditionEvaluationResult;
 import org.junit.jupiter.api.extension.ExecutionCondition;
@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Target({ElementType.ANNOTATION_TYPE, ElementType.METHOD})
@@ -61,11 +60,10 @@ public @interface ServiceTest {
                 CodeSource codeSource = ServiceFactory.class.getProtectionDomain().getCodeSource();
                 Path path = Path.of(codeSource.getLocation().toURI());
                 try (Stream<Path> walk = Files.walk(path)) {
-                    List<Class<?>> factories = walk
+                    List<? extends Class<?>> factories = walk
                             .filter(p -> p.getFileName().toString().endsWith(".class"))
                             .map(p -> getServiceClass(path, p))
-                            .filter(Objects::nonNull)
-                            .collect(Collectors.toList());
+                            .filter(Objects::nonNull).toList();
 
                     List<Class<?>> maxFactories = new ArrayList<>();
                     long maxStage = 0;

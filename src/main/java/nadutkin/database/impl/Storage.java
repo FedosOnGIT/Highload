@@ -1,10 +1,10 @@
 package nadutkin.database.impl;
 
-import nadutkin.database.BaseEntry;
-import nadutkin.database.Entry;
 import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
+import nadutkin.database.BaseEntry;
+import nadutkin.database.Entry;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -15,14 +15,14 @@ import java.util.List;
 import static nadutkin.database.impl.Constants.INDEX_HEADER_SIZE;
 import static nadutkin.database.impl.Constants.INDEX_RECORD_SIZE;
 
-class Storage implements Closeable {
+public class Storage implements Closeable {
     // supposed to have fresh files first
 
     private final ResourceScope scope;
     final List<MemorySegment> sstables;
     private final boolean hasTombstones;
 
-    Storage(ResourceScope scope, List<MemorySegment> sstables, boolean hasTombstones) {
+    public Storage(ResourceScope scope, List<MemorySegment> sstables, boolean hasTombstones) {
         this.scope = scope;
         this.sstables = sstables;
         this.hasTombstones = hasTombstones;
