@@ -43,8 +43,10 @@ public class HighLoadHttpServer extends HttpServer {
     public synchronized void stop() {
         shutdownAndAwaitTermination(executors);
         for (SelectorThread selector : selectors) {
-            for (Session session : selector.selector) {
-                session.close();
+            if (selector.selector.isOpen()) {
+                for (Session session : selector.selector) {
+                    session.close();
+                }
             }
         }
         super.stop();
