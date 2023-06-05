@@ -1,25 +1,24 @@
 package nadutkin.utils;
 
 import jdk.incubator.foreign.MemorySegment;
-import nadutkin.database.Config;
+import nadutkin.app.replicas.StoredValue;
 import nadutkin.database.Entry;
-import nadutkin.database.impl.MemorySegmentComparator;
-import nadutkin.database.impl.Storage;
 import one.nio.http.HttpServerConfig;
 import one.nio.server.AcceptorConfig;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Collection;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static nadutkin.database.impl.Constants.LOG;
-import static nadutkin.database.impl.StorageMethods.getSizeOnDisk;
 
 public final class UtilsClass {
     private UtilsClass() {
@@ -102,144 +101,24 @@ public final class UtilsClass {
         return httpConfig;
     }
 
-    public static class Memory {
+    public static MemorySegment getKey(String id) {
+        return MemorySegment.ofArray(getBytes(id));
+    }
 
-        static final Memory EMPTY = new Memory(-1);
-        private final AtomicLong size = new AtomicLong();
-        private final AtomicBoolean oversized = new AtomicBoolean();
-
-        private final ConcurrentSkipListMap<MemorySegment, Entry<MemorySegment>> delegate =
-                new ConcurrentSkipListMap<>(MemorySegmentComparator.INSTANCE);
-
-        private final long sizeThreshold;
-
-        Memory(long sizeThreshold) {
-            this.sizeThreshold = sizeThreshold;
-        }
-
-        public boolean isEmpty() {
-            return delegate.isEmpty();
-        }
-
-        public Collection<Entry<MemorySegment>> values() {
-            return delegate.values();
-        }
-
-        public boolean put(MemorySegment key, Entry<MemorySegment> entry) {
-            if (sizeThreshold == -1) {
-                throw new UnsupportedOperationException("Read-only map");
-            }
-            Entry<MemorySegment> segmentEntry = delegate.put(key, entry);
-            long sizeDelta = getSizeOnDisk(entry);
-            if (segmentEntry != null) {
-                sizeDelta -= getSizeOnDisk(segmentEntry);
-            }
-            long newSize = size.addAndGet(sizeDelta);
-            if (newSize > sizeThreshold) {
-                return !oversized.getAndSet(true);
-            }
-            return false;
-        }
-
-        public boolean overflow() {
-            return !oversized.getAndSet(true);
-        }
-
-        public Iterator<Entry<MemorySegment>> get(MemorySegment from, MemorySegment to) {
-            return to == null
-                    ? delegate.tailMap(from).values().iterator()
-                    : delegate.subMap(from, to).values().iterator();
-        }
-
-        public Entry<MemorySegment> get(MemorySegment key) {
-            return delegate.get(key);
+    public static byte[] valueToSegment(StoredValue value) throws IOException {
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+            ObjectOutputStream out = new ObjectOutputStream(bos);
+            out.writeObject(value);
+            out.flush();
+            return bos.toByteArray();
         }
     }
 
-    public static class State {
-        final Config config;
-        public final Memory memory;
-        public final Memory flushing;
-        public final Storage storage;
-        public final boolean closed;
-
-        State(Config config, Memory memory, Memory flushing, Storage storage) {
-            this.config = config;
-            this.memory = memory;
-            this.flushing = flushing;
-            this.storage = storage;
-            this.closed = false;
-        }
-
-        State(Config config, Storage storage, boolean closed) {
-            this.config = config;
-            this.memory = Memory.EMPTY;
-            this.flushing = Memory.EMPTY;
-            this.storage = storage;
-            this.closed = closed;
-        }
-
-        public static State newState(Config config, Storage storage) {
-            return new State(
-                    config,
-                    new Memory(config.flushThresholdBytes()),
-                    Memory.EMPTY,
-                    storage
-            );
-        }
-
-        public State prepareForFlush() {
-            checkNotClosed();
-            if (isFlushing()) {
-                throw new IllegalStateException("Already flushing");
-            }
-            return new State(
-                    config,
-                    new Memory(config.flushThresholdBytes()),
-                    memory,
-                    storage
-            );
-        }
-
-        public State afterFlush(Storage storage) {
-            checkNotClosed();
-            if (!isFlushing()) {
-                throw new IllegalStateException("Wasn't flushing");
-            }
-            return new State(
-                    config,
-                    memory,
-                    Memory.EMPTY,
-                    storage
-            );
-        }
-
-        public State afterCompact(Storage storage) {
-            checkNotClosed();
-            return new State(
-                    config,
-                    memory,
-                    flushing,
-                    storage
-            );
-        }
-
-        public State afterClosed() {
-            checkNotClosed();
-            if (!storage.isClosed()) {
-                throw new IllegalStateException("Storage should be closed early");
-            }
-            return new State(config, storage, true);
-        }
-
-        public void checkNotClosed() {
-            if (closed) {
-                throw new IllegalStateException("Already closed");
-            }
-        }
-
-        public boolean isFlushing() {
-            return this.flushing != Memory.EMPTY;
+    public static StoredValue segmentToValue(byte[] value) throws IOException, ClassNotFoundException {
+        ByteArrayInputStream bis = new ByteArrayInputStream(value);
+        try (ObjectInput in = new ObjectInputStream(bis)) {
+            return (StoredValue) in.readObject();
         }
     }
+
 }
