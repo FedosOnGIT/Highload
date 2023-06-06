@@ -140,7 +140,7 @@ public class ServiceImpl extends ReplicaService {
                 });
     }
 
-    @ServiceFactory(stage = 5, week = 5, bonuses = {"SingleNodeTest#respectFileFolder"})
+    @ServiceFactory(stage = 6, week = 6, bonuses = {"SingleNodeTest#respectFileFolder"})
     public static class Factory implements ServiceFactory.Factory {
 
         @Override

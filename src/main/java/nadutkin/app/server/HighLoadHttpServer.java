@@ -1,11 +1,14 @@
 package nadutkin.app.server;
 
+import nadutkin.app.range.ChunkResponse;
+import nadutkin.app.range.RangeQueueItem;
 import one.nio.http.HttpServer;
 import one.nio.http.HttpServerConfig;
 import one.nio.http.HttpSession;
 import one.nio.http.Request;
 import one.nio.http.Response;
 import one.nio.net.Session;
+import one.nio.net.Socket;
 import one.nio.server.SelectorThread;
 
 import java.io.IOException;
@@ -65,5 +68,19 @@ public class HighLoadHttpServer extends HttpServer {
                 }
             }
         });
+    }
+
+    @Override
+    public HttpSession createSession(Socket socket) {
+        return new HttpSession(socket, this) {
+            @Override
+            public synchronized void sendResponse(Response response) throws IOException {
+                if (response instanceof ChunkResponse) {
+                    super.write(new RangeQueueItem(response.getBody()));
+                } else {
+                    super.sendResponse(response);
+                }
+            }
+        };
     }
 }
