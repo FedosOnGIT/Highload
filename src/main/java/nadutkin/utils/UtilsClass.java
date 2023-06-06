@@ -121,4 +121,7 @@ public final class UtilsClass {
         }
     }
 
+    public static byte[] processBytes(byte[] bytes) {
+        return bytes == null ? null : bytes.clone();
+    }
 }
